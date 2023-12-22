@@ -1,0 +1,93 @@
+version: "3.7"
+services:
+  zipkin:
+    container_name: zipkin
+    image: openzipkin/zipkin
+    extra_hosts: ['host.docker.internal:host-gateway']
+    ports:
+      - "9411:9411"
+  config-server:
+    image: gibbbackfc/config-server:1.0-SNAPSHOT
+    ports:
+      - "8088:8088"
+    ### verifica si el service está bien
+    healthcheck:
+      test: curl --fail http://localhost:8088/employee/docker || exit 1
+      interval: 5s
+      timeout: 2s
+      retries: 3
+  discovery-server:
+    image: gibbbackfc/discovery-server:1.0-SNAPSHOT
+    ports:
+      - "8061:8061"
+    depends_on:
+      config-server:
+        condition: service_healthy
+    links:
+      - config-server
+    healthcheck:
+      test: curl --fail http://localhost:8061/eureka/v2/apps || exit 1
+      interval: 4s
+      timeout: 2s
+      retries: 3
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+  employee-service:
+    image: gibbbackfc/employee-service:1.0-SNAPSHOT
+    ports:
+      - "8080"
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+    links:
+      - config-server
+      - discovery-server
+      - zipkin
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+  department-service:
+    image: gibbbackfc/department-service:1.0-SNAPSHOT
+    ports:
+      - "8080"
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+    links:
+      - config-server
+      - discovery-server
+      - employee-service
+      - zipkin
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+  organization-service:
+    image: gibbbackfc/organization-service:1.0-SNAPSHOT
+    ports:
+      - "8080"
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+    links:
+      - config-server
+      - discovery-server
+      - employee-service
+      - department-service
+      - zipkin
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+  gateway-service:
+    image: gibbbackfc/gateway-service:1.0-SNAPSHOT
+    ports:
+      - "8060:8060"
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+    links:
+      - config-server
+      - discovery-server
+      - employee-service
+      - department-service
+      - organization-service
+      - zipkin
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+
